@@ -50,7 +50,6 @@ function mapPlayerToColor(player) {
 }
 
 function mapPieceToImage(type, player = -1) {
-	let ic =icons[type][mapPlayerToColor(player)];
 	return icons[type][mapPlayerToColor(player)];
 }
 
