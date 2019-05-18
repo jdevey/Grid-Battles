@@ -1,0 +1,19 @@
+export default {
+	centered: {
+		display: 'flex',
+		flex: 1,
+		flexDirection: 'column',
+		justifyContent: 'center',
+		alignItems: 'center',
+	},
+	cellStyle: {
+		border: '1.5px solid #333',
+	},
+	highlightedCell: {
+		border: '1.5px solid #333',
+		backgroundColor: '#CCC'
+	},
+	test: {
+		flex: 1
+	}
+};

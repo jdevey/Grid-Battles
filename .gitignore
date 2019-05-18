@@ -21,3 +21,11 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# temp files
+*~
+
+# executables
+*.exe
+*.exe.stacktrace
+
