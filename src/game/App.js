@@ -10,7 +10,7 @@ import '../App.css';
 import Cell from './models/Cell';
 import styles from './styles/styles';
 
-const dims = 8;
+const dims = 18;
 const numPlayers = 8;
 
 const adjCells = [
@@ -24,6 +24,10 @@ const adjCells = [
 	{y: 1, x: 1},
 ]
 
+function ucFirst(s) {
+    return s[0].toUpperCase() + s.slice(1);
+}
+
 function mapPlayerToColor(player) {
 	switch(player) {
 		case -1:
@@ -31,17 +35,17 @@ function mapPlayerToColor(player) {
 		case 0:
 			return 'red';
 		case 1:
-			return 'blue';
-		case 2:
-			return 'green';
-		case 3:
-			return 'purple';
-		case 4:
-			return 'yellow';
-		case 5:
-			return 'teal';
-		case 6:
 			return 'orange';
+		case 2:
+			return 'yellow';
+		case 3:
+			return 'green';
+		case 4:
+			return 'teal';
+		case 5:
+			return 'blue';
+		case 6:
+			return 'purple';
 		case 7:
 			return 'black';
 		default:
@@ -87,20 +91,6 @@ function countSurroundingEmptySquares(G, player) {
 	return ret;
 }
 
-function countForts(G, player) {
-	var cnt = 0;
-	for (let i = 0; i < dims; ++i) {
-		for (let j = 0; j < dims; ++j) {
-			cnt += G.cells[i][j].type === 'fort' && G.cells[i][j].player === player;
-		}
-	}
-	return cnt;
-}
-
-function playerCanMove(G, player) {
-	return G.movesRemaining > 0 && countSurroundingEmptySquares(G, player) > 0;
-}
-
 function pointsOnSameLine(y1, x1, y2, x2) {
 	return y1 === y2 || x1 === x2 || y1 - x1 === y2 - x2 || y1 + x1 === y2 + x2;
 }
@@ -120,6 +110,61 @@ function getAttackStatistics(G, ctx, y, x, dy, dx) {
 	return { attack: attack, defense: defense };
 }
 
+function isValidAttack(G, ctx, y, x, sy, sx) {
+	if (!pointsOnSameLine(sy, sx, y, x))  {
+		return false;
+	}
+	var cells = G.cells;
+	var player = parseInt(ctx.currentPlayer);
+	var dy = (y - sy) / Math.max(Math.abs(y - sy), 1);
+	var dx = (x - sx) / Math.max(Math.abs(x - sx), 1);
+	var ay = sy + dy;
+	var ax = sx + dx;
+	if (cells[ay][ax].player !== -1 && cells[ay][ax].player !== player && cells[sy][sx].stackable) {
+		var statistics = getAttackStatistics(G, ctx, sy, sx, dy, dx);
+		if (statistics.attack >= statistics.defense * 2) {
+			return true;
+		}
+	}
+}
+
+function hasValidAttacks(G, ctx) {
+	var cells = G.cells;
+	var player = parseInt(ctx.currentPlayer);
+	for (let i = 0; i < dims; ++i) {
+		for (let j = 0; j < dims; ++j) {
+			if (cells[i][j].player !== player) {
+				continue;
+			}
+			for (let d in adjCells) {
+				var y = i + adjCells[d].y;
+				var x = j + adjCells[d].x;
+				if (!isValidCoord(y, x)) {
+					continue;
+				}
+				if (isValidAttack(G, ctx, y, x, i, j)) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+function countForts(G, player) {
+	var cnt = 0;
+	for (let i = 0; i < dims; ++i) {
+		for (let j = 0; j < dims; ++j) {
+			cnt += G.cells[i][j].type === 'fort' && G.cells[i][j].player === player;
+		}
+	}
+	return cnt;
+}
+
+function playerCanMove(G, ctx) {
+	return G.movesRemaining > 0 && (countSurroundingEmptySquares(G, parseInt(ctx.currentPlayer)) > 0 || hasValidAttacks(G, ctx));
+}
+
 function getGameWinner(G, ctx) {
 	var scores = new Array(ctx.numPlayers).fill(0);
 	for (let i = 0; i < dims; ++i) {
@@ -132,19 +177,37 @@ function getGameWinner(G, ctx) {
 	return scores.indexOf(Math.max(...scores));
 }
 
+// Fisher-Yates shuffle algorithm
+function shuffle(a) {
+	for (let i = a.length - 1; i > 0; --i) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[a[i], a[j]] = [a[j], a[i]];
+	}
+	return a;
+}
+
 function generateBoardStart() {
+	var seed = new Array(dims * dims).fill(-1);
+	for (let i = 0; i < numPlayers; ++i) {
+		seed[i] = i;
+	}
+
+	shuffle(seed);
+
 	var cells = new Array(dims);
 	for (let i = 0; i < dims; ++i) {
-		cells[i] = new Array(dims).fill(new Cell('empty'));
+		cells[i] = new Array(dims);
 	}
-	for (let i = 0; i < numPlayers; ++i) {
-		cells[i][i] = new Cell('fort', i);
+
+	for (let i = 0; i < dims; ++i) {
+		for (let j = 0; j < dims; ++j) {
+			cells[i][j] = seed[i * dims + j] === -1 ?
+				new Cell("empty") :
+				new Cell("fort", seed[i * dims + j]);
+		}
 	}
 	return cells;
 }
-
-
-
 
 const GridBattles = Game({
 
@@ -165,7 +228,7 @@ const GridBattles = Game({
 
 	flow: {
 		endTurnIf: (G, ctx) => {
-			return !playerCanMove(G, parseInt(ctx.currentPlayer));
+			return !playerCanMove(G, ctx);
 		},
 		onTurnEnd: (G, ctx) => {
 			if (G.moveCnt === 0) {
@@ -178,7 +241,7 @@ const GridBattles = Game({
 			G.movesRemaining = countForts(G, (parseInt(ctx.currentPlayer) + 1) % ctx.numPlayers);
 		},
 		onTurnBegin: (G, ctx) => {
-			if (!playerCanMove(G, parseInt(ctx.currentPlayer))) {
+			if (!playerCanMove(G, ctx)) {
 				ctx.events.endTurn();
 			}
 		},
@@ -189,9 +252,6 @@ const GridBattles = Game({
 		}
 	},
 });
-
-
-
 
 class Grid extends React.Component {
 
@@ -224,18 +284,19 @@ class Grid extends React.Component {
 				if (sy === y && sx === x) {
 					this.setState({ isCellSelected: false })
 				}
+				else if (cells[y][x].player === player && cells[y][x].stackable) {
+					this.setState({
+						isCellSelected: true,
+						selectedCell: { y: y, x: x }
+					})
+				}
 				else {
-					if (pointsOnSameLine(sy, sx, y, x)) {
+					if (isValidAttack(this.props.G, this.props.ctx, y, x, sy, sx)) {
 						var dy = (y - sy) / Math.max(Math.abs(y - sy), 1);
 						var dx = (x - sx) / Math.max(Math.abs(x - sx), 1);
-						if (cells[sy + dy][sx + dx].player !== -1 && cells[sy + dy][sx + dx].player !== player) {
-							var statistics = getAttackStatistics(this.props.G, this.props.ctx, sy, sx, dy, dx);
-							var type = this.props.G.cells[sy + dy][sx + dx].type;
-							if (statistics.attack >= statistics.defense * 2) {
-								this.setState({ isCellSelected: false });
-								this.props.moves.utilizeCell(sy + dy, sx + dx, type === 'cavalry' ? 'void' : 'cavalry');
-							}
-						}
+						var type = cells[sy + dy][sx + dx].type;
+						this.props.moves.utilizeCell(sy + dy, sx + dx, type === 'cavalry' ? 'void' : 'cavalry');
+						this.setState({ isCellSelected: false });
 					}
 				}
 			}
@@ -265,8 +326,8 @@ class Grid extends React.Component {
 	}
 
 	render() {
-		let player = parseInt(this.props.ctx.currentPlayer);
 		let winner = '';
+		let color = mapPlayerToColor(parseInt(this.props.ctx.currentPlayer));
 		if (this.props.ctx.gameover) {
 			winner =
 				this.props.ctx.gameover.winner !== undefined ? (
@@ -316,8 +377,8 @@ class Grid extends React.Component {
 
 		return (
 			<div style={styles.centered}>
-				<div>Player: {player}</div>
-				<div>Moves Remaining: {this.props.G.movesRemaining}</div>
+				<div>{ucFirst(color)}'s turn</div>
+				<div>Moves remaining: {this.props.G.movesRemaining}</div>
 				<div id='board' style={{display: 'flex', flexDirection: 'column', border: '1.5px solid #333'}}>{body}</div>
 				{moveTypes}
 				{endTurnButton}
@@ -330,7 +391,8 @@ class Grid extends React.Component {
 const App = Client({
 	game: GridBattles,
 	board: Grid,
-	numPlayers: numPlayers
+	numPlayers: numPlayers,
+	debug: false // set to true to show side panel
 })
 
 export default App;
